@@ -1,0 +1,89 @@
+<cffunction name="updateEmail" access="remote" output="true" returntype="Any" xmlRpcAccess="true">
+  	<!--- Arguments passed as a structure from the XMLRPC package
+		param1.Method  (updateEmail)
+		param1.password
+		param1.accountType (1=user, 2=alias)
+		param1.EmailAddress (full email account to be created)
+		param1.NewPassword (user new password if account type is 1) 
+		param1.NewFirstName (if account type is 1)
+		param1.NewLastName (if account type is 1)
+		param1.NewCompanyName (if account type is 1)
+		param1.Addresses (comma delimited list of forwarding addresses if account type is 2)
+		param1.agence
+		 --->
+		<cfargument name="param1" type="struct" required="true" />
+		<cfscript>
+		var serviceResult = structNew();
+		var params = structNew();
+		serviceResult.status = 1;
+		params.DomainName = this.mailDomain;
+		// check security
+		if (not checkSecurity(param1.password).status) {
+			serviceResult.status = -1;
+			serviceResult.detail = "Not authorized...";
+			return serviceResult;
+		}
+		</cfscript>
+
+		<cftry>
+			<cfset oMail = createObject("component", "ws.smartermailAPI.smartermail").init(this.mailServerURL,this.mailAdmin,this.mailAdminPsw) />
+			<cfswitch expression="#param1.accountType#">
+				<cfcase value="1">
+					<cfset params.EmailAddress = param1.email />
+					<cfset params.NewPassword = param1.newPassword />
+					<cfif param1.emailType eq "agent">
+					<cfset params.NewFirstName = param1.NewFirstName />
+					<cfset params.NewLastName = param1.NewLastName />
+					<cfelseif param1.emailType eq "broker">
+					<cfset params.NewFirstName = param1.NewCompanyName />
+					<cfset params.NewLastName = "" />
+					</cfif>
+					<cfset params.IsDomainAdmin = "false" />
+					<cfset serviceResult.detail = XmlParse(oMail.callWS("svcUserAdmin","UpdateUser",params)) />
+				</cfcase>
+				<cfcase value="2">
+					<cfset params.AliasName = listFirst(param1.email, "@") />				
+					<!--- if multiple forwarding addresses, change the delimiter to CRLF --->
+					<cfset params.Addresses = param1.addresses />
+					<cfif listLen(params.Addresses, ",") gt 1>
+						<cfset params.Addresses = listChangeDelims(params.Addresses, this.crlf, ",") />
+					</cfif>
+					<cfset serviceResult.detail = XmlParse(oMail.callWs("svcAliasAdmin", "UpdateAlias", params)) />
+				</cfcase>
+				<cfdefaultcase>
+					<cfset serviceResult.status = -1 />
+					<cfset serviceResult.detail = "Invalid account type..." />
+				</cfdefaultcase>
+			</cfswitch>
+			<cfcatch>
+				<cfset serviceResult.status = -1 />
+				<cfset serviceResult.detail = cfcatch />
+			</cfcatch>
+		</cftry>
+		<cfif serviceResult.status>
+			<cfparam name="param1.Addresses" default="" />
+			<cfparam name="param1.NewFirstName" default="" />
+			<cfparam name="param1.NewLastName" default="" />
+			<cftry>
+				<cfquery name="addAccount" datasource="#this.mainDSN#">
+					declare @agencycode varchar(5);
+					set @agencyCode = (select top 1 agencyCode from tbl_companies where agence = #param1.agence#);
+					update tbl_emails set
+						agence = <cfqueryparam cfsqltype="cf_sql_integer" value="#param1.agence#" />
+					,	agencyCode = @agencyCode
+					,	firstName = <cfqueryparam cfsqltype="cf_sql_varchar" value="#param1.NewFirstName#" />
+					,	lastName = <cfqueryparam cfsqltype="cf_sql_varchar" value="#param1.NewLastName#" />
+					<cfif len(trim(param1.NewCompanyName))>
+					,	companyName = <cfqueryparam cfsqltype="cf_sql_varchar" value="#param1.NewCompanyName#" />
+					</cfif>
+					,	forwarding = <cfqueryparam cfsqltype="cf_sql_varchar" value="#param1.Addresses#" />
+					,	dateLastModified = getDate()
+					where email = <cfqueryparam cfsqltype="cf_sql_varchar" value="#trim(param1.Email)#" />
+				</cfquery>
+				<cfcatch>
+					<cfset sendError(cfcatch) />
+				</cfcatch>
+			</cftry>
+		</cfif>
+		<cfreturn serviceResult />
+	</cffunction>
