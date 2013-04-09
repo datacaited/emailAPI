@@ -1,0 +1,75 @@
+<cffunction name="emailCheck" access="remote" output="true" returntype="Any" xmlRpcAccess="true">
+  	<!--- Arguments received from the XMLRPC package
+		param1.Password
+		 --->
+		<cfargument name="param1" type="struct" required="true" />
+		<cfset var serviceResult = structNew() />
+		<cfset var params = duplicate(arguments.param1) />
+		<cfset var serviceResult.EmailAddress = params.EmailAddress />
+		<cfset serviceResult.status = 1 />
+		<cfif not checkSecurity(params.password).status>
+			<cfset serviceResult.status = -1 />
+			<cfset serviceResult.detail = "Non authorized..." />
+		<cfelse>
+ 			<cftry> 
+				<cfscript>
+					paramOut = structNew();
+					paramOut.DomainName = this.mailDomain;
+					paramOut.Page = "svcUserAdmin";
+					paramOut.Method = "GetUsers";
+					oSM = createObject("component", "ws.smartermailAPI.smartermail").init(this.mailServerURL,this.mailAdmin,this.mailAdminPsw);
+					serviceResult.users = XmlParse(oSM.callWS(paramOut.Page,paramOut.Method,paramOut));
+					
+					//Find if user
+					users = Find(ReplaceNoCase(serviceResult.EmailAddress,"@eraFrance.com","@erafrance.com","ALL"),serviceResult.users);
+					
+					paramOut.Page = "svcAliasAdmin";
+					paramOut.Method = "GetAliases";
+					serviceResult.aliases= XmlParse(oSM.callWS(paramOut.Page,paramOut.Method,paramOut));
+					 
+				
+					
+					//Find if alias
+					aliasAddress =Find(serviceResult.EmailAddress,serviceResult.aliases);					
+					if(aliasAddress neq 0){
+						aliasNotAddress = ReplaceNoCase(serviceResult.EmailAddress,serviceResult.EmailAddress, "", "ALL");
+						aliasName = Find(aliasNotAddress,serviceResult.aliases);
+						if(aliasName eq 0){
+							aliasAnswer =0;
+						}else{
+							aliasAnswer=1;
+						}
+
+					}else{
+						aliasNotAddress= ReplaceNoCase(serviceResult.EmailAddress,"@eraFrance.com", "", "ALL");
+						aliasName = Find(aliasNotAddress,serviceResult.aliases);
+						if(aliasName gt 0){
+							aliasAnswer = 1;
+							
+						}else{
+							aliasAnswer =0;
+						}
+					}
+
+					
+					//Set result
+					if(aliasAnswer eq 1){
+						serviceResult = 2;
+					}
+					if(users gt 0){
+							serviceResult = 1;
+					}else if(users eq 0 and aliasAnswer neq 1){
+							serviceResult = 0;
+					}
+
+					return serviceResult;  
+				</cfscript>
+
+ 				<cfcatch>
+					<cfset serviceResult.status = -1 />
+					<cfset serviceResult.detail = cfcatch.message & " " & cfcatch.detail />
+				</cfcatch>
+			</cftry>
+		</cfif>
+		<cfreturn serviceResult />		
+	</cffunction>
