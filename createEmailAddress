@@ -1,0 +1,124 @@
+<cffunction name="createEmail" access="remote" output="true" returntype="Any" xmlrpcaccess="true">
+  	<!--- Arguments passed as a structure from the XMLRPC package
+		param1.Method  (createEmail)
+		param1.password
+		param1.accountType (1=user, 2=alias)
+		param1.email (full email account to be created)
+		param1.newPassword (user new password if account type is 1) 
+		
+		param1.firstName (if account type is 1 and emailType is agent)
+		param1.lastName (if account type is 1 and emailType is agent)
+		---OR---
+		param1.companyName (if account type is 1 and emailType is broker)
+		
+		param1.Addresses (comma delimited list of forwarding addresses if account type is 2)
+		param1.agence
+		 --->
+		<cfargument name="param1" type="struct" required="true">
+		<cfscript>
+		var serviceResult = structNew();
+		var params = structNew();
+		serviceResult.status = 1;
+		params.DomainName = this.mailDomain;
+		// check security
+		if (not checkSecurity(param1.password).status) {
+			serviceResult.status = -1;
+			serviceResult.detail = "Not authorized...";
+			return serviceResult;
+		}
+		</cfscript>
+		<cftry>
+			<cfset omail="createObject(&quot;component&quot;," "ws.smartermailapi.smartermail").init(this.mailserverurl,this.mailadmin,this.mailadminpsw)="">
+			<cfswitch expression="#param1.accountType#">
+				<cfcase value="1">
+					<cfset params.newusername="listFirst(param1.email," "@")="">
+					<cfset params.newpassword="param1.newPassword">
+					<cfset params.firstname="param1.companyName/">
+					<cfset params.lastname="">
+					<cfset params.maxmailboxsize="250">
+					
+					&lt; <cfif param1.emailtype="" eq="" "agent"="" and="" listlast(param1.email,="" "@")="" "immo.fr"="">					
+						<cfset params.firstname="param1.firstName">
+						<cfset params.lastname="param1.lastName">
+					<cfelseif param1.emailtype="" eq="" "broker"="" and="" listlast(param1.email,="" "@")="" "france.com"="">
+						<cfset params.firstname="param1.companyName/">
+						<cfset params.lastname="">
+					<cfelse>
+						<cfoutput>
+								If you are creating an agent email the domain must be @immo.fr<br>
+								If you are creating a broker email the domain must be @france.com
+						</cfoutput>
+						<cfabort>
+					</cfabort></cfelse></cfset></cfset></cfelseif></cfset></cfset></cfif> 
+					<cfset params.isdomainadmin="false">
+					<cfset serviceresult.detail="XmlParse(oMail.callWS(&quot;svcUserAdmin&quot;,&quot;AddUser2&quot;,params))">
+					
+					
+				</cfset></cfset></cfset></cfset></cfset></cfset></cfset></cfcase>
+				<cfcase value="2">
+					<cfset params.aliasname="listFirst(param1.email," "@")="">				
+					<!--- if multiple forwarding addresses, change the delimiter to CRLF --->
+					<cfset params.addresses="param1.addresses">
+					<cfif listlen(params.addresses,="" ",")="" gt="" 1="">
+						<cfset params.addresses="listChangeDelims(params.Addresses," this.crlf,="" ",")="">
+					</cfset></cfif>
+					<cfset serviceresult.detail="XmlParse(oMail.callWs(&quot;svcAliasAdmin&quot;," "addalias",="" params))="">
+				</cfset></cfset></cfset></cfcase>
+				<cfdefaultcase>
+					<cfset serviceresult.status="-1">
+					<cfset serviceresult.detail="Invalid account type...">
+				</cfset></cfset></cfdefaultcase>
+			</cfswitch>
+			<cfcatch>
+				<cfset serviceresult.status="-1">
+				<cfset serviceresult.detail="cfcatch">
+			</cfset></cfset></cfcatch>
+		</cfset></cftry>
+		
+
+		<cfset result="Find(&quot;true&quot;," serviceresult.detail)="">
+		<cfif result="" gt="" 0="">
+			<cfset serviceresult.status="1">
+		<cfelse>
+			<cfset serviceresult.status="-1">
+		</cfset></cfelse></cfset></cfif>
+
+		<cfif serviceresult.status="" eq="" 1="">
+			<cfparam name="param1.Addresses" default="">
+			<cfparam name="param1.firstName" default="">
+			<cfparam name="param1.lastName" default="">
+			<cfparam name="param1.agence" default="">
+			
+			<cftry>
+				<cfquery name="addAccount" datasource="#this.mainDSN#">
+					declare @agencycode varchar(5);
+					set @agencyCode = 
+					<cfif len(trim(param1.codeagence))="">
+						(select top 1 agencyCode from tbl_companies where agence = #param1.agence#);
+					<cfelse>
+						'';					
+					</cfelse></cfif>
+					insert into tbl_emails (
+						agence
+					,	agencyCode
+					,	email
+					,	companyName
+					,	forwarding
+					,	isActive
+					) values (
+						<cfqueryparam cfsqltype="cf_sql_integer" value="#param1.agence#">
+					,	@agencyCode
+					,	<cfqueryparam cfsqltype="cf_sql_varchar" value="#trim(param1.Email)#">
+					,	<cfqueryparam cfsqltype="cf_sql_varchar" value="#trim(param1.companyName)#">
+					,	<cfqueryparam cfsqltype="cf_sql_varchar" value="#trim(param1.Addresses)#">
+					,	<cfqueryparam cfsqltype="cf_sql_varchar" value="1">
+					)
+				</cfqueryparam></cfqueryparam></cfqueryparam></cfqueryparam></cfqueryparam></cfquery>
+				<cfcatch>
+					<cfset senderror(cfcatch)="">
+				</cfset></cfcatch>
+			</cftry>
+		</cfparam></cfparam></cfparam></cfparam></cfif>
+		
+		<cfreturn serviceresult.status="">
+	</cfreturn></cfset></cfargument></cffunction>
