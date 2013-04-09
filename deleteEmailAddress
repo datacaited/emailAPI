@@ -1,0 +1,50 @@
+<cffunction name="deleteEmail" access="remote" output="false" returntype="Any" xmlRpcAccess="true">
+  	<!--- 
+		param1.Method  (createEmail)
+		param1.password
+		param1.EmailAddress
+		param1.accountType (1 = user, 2 = alias)
+		 --->
+		<cfargument name="param1" type="struct" required="true" />
+		<cfscript>
+		var serviceResult = structNew();
+		var params = duplicate(arguments.param1);
+		
+		params.DomainName = this.mailDomain;
+		// check security
+		if (not checkSecurity(param1.password).status) {
+			serviceResult.status = -1;
+			serviceResult.detail = "Not authorized...";
+			return serviceResult;
+		}
+		</cfscript>
+		<cftry>
+			<cfscript>
+			oSM = createObject("component", "ws.smartermailAPI.smartermail").init(this.mailServerURL,this.mailAdmin,this.mailAdminPsw);
+			
+			params.Username = listFirst(params.email, "@");
+			serviceResult.detail = XmlParse(oSM.callWs("svcUserAdmin", "DeleteUser", params));
+			
+			params.AliasName = listFirst(params.email, "@");
+					serviceResult.detail = XmlParse(oSM.callWs("svcAliasAdmin", "DeleteAlias", params));
+			serviceResult.status = 1;
+			</cfscript>
+			<cfcatch>
+				<cfset serviceResult.status = -1 />
+				<cfset serviceResult.detail = cfcatch />
+			</cfcatch>
+		</cftry>
+		<cfif serviceResult.status>
+			<cftry>
+				<cfquery name="delete" datasource="#this.mainDSN#">
+					update tbl_emails
+					set isActive = 0
+					where email = <cfqueryparam cfsqltype="cf_sql_varchar" value="#params.email#" />
+				</cfquery>
+				<cfcatch>
+					<cfset sendError(cfcatch) />
+				</cfcatch>
+			</cftry>
+		</cfif>
+		<cfreturn serviceResult.status />
+	</cffunction>
