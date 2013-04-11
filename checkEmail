@@ -41,7 +41,7 @@
 						}
 
 					}else{
-						aliasNotAddress= ReplaceNoCase(serviceResult.EmailAddress,"@eraFrance.com", "", "ALL");
+						aliasNotAddress= ReplaceNoCase(serviceResult.EmailAddress,"@France.com", "", "ALL");
 						aliasName = Find(aliasNotAddress,serviceResult.aliases);
 						if(aliasName gt 0){
 							aliasAnswer = 1;
